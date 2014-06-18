@@ -25,13 +25,36 @@ var Conjure = (function() {
         stack = [];
 
     /**
-     * returns true when precedence of operator f is less than
-     * that of g.
-     * @param  {string} f string representing emmet operator
-     * @param  {string} g ibid
-     * @return {boolean} true when precendence of f <= g
+     * This hash value precLTE[f][g] is true when the precedence
+     * of operator f is less than or equal to that of operator g.
+     * @type {Object}
      */
-    var precLT = function(f, g) {};
+    var precLTE = { // need to actually configure this
+        '>': {
+
+            '^': true,
+            '*': true,
+            '+': true
+        },
+        '^': {
+
+            '>': true,
+            '*': true,
+            '+': true
+        },
+        '*': {
+
+            '>': true,
+            '^': true,
+            '+': true
+        },
+        '+': {
+
+            '>': false,
+            '^': true,
+            '*': true
+        },
+    };
 
     /**
      * obtain RPN for expr using Shunting-yard algorithm.
@@ -58,7 +81,7 @@ var Conjure = (function() {
                         }
                         stack.pop(); // ')' is removed from expr at end of while loop
                     } else {
-                        while (precLT(currentOp, stack[len - 1])) {
+                        while (precLTE[currentOp][stack[len - 1]]) {
                             tokens.push(stack.pop());
                         }
                         stack.push(currentOp);
@@ -85,19 +108,19 @@ var Conjure = (function() {
      */
     var opHash = {
 
-        '>': function(a, b) {
+        '>': function(a, b) { // make a the parent of b
 
         },
 
-        '^': function(a, b) {
+        '^': function(a, b) { // move up a level
 
         },
 
-        '*': function(a, b) {
+        '*': function(a, b) { // repeat a b times
 
         },
 
-        '+': function(a, b) {
+        '+': function(a, b) { // make a and b siblings
 
         },
     };
@@ -111,7 +134,7 @@ var Conjure = (function() {
      * Future: return an actual DOM/JQuery/other object rather than a string?
      */
     var construct = function(expr) {
-        SYAlgo(expr);
+        SYAlgo(expr); // may need to reverse
         var len = tokens.length;
 
         while (len--) {
