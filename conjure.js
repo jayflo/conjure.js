@@ -1,3 +1,23 @@
+/**
+ * Still in production!
+ *
+ * Goal: to provide a method for creating DOM elements quickly at runtime
+ * with a small amount of code.  The Emmet toolkit[http://emmet.io/]
+ * provides an abbreviation syntax [see http://docs.emmet.io/abbreviations/syntax/]
+ * which we shamelessly pirate for consistency to the user and its injenuity
+ * (thanks Emmet developers!).
+ *
+ * The Conjure.js module exposes one (maybe more in the future) function:
+ *
+ * Conjure.element(emmetStr)
+ *
+ * where emmetStr is a string consiting of emmet abbreviation syntax.
+ * This function outputs a string which is the expansion of the abbreviation
+ * syntax. This final string may then be operated on in any manner and added
+ * to the DOM.
+ *
+ * @return {string} HTML expansion of emmet abreviation syntax.
+ */
 var Conjure = (function() {
 
     var operator = /[\(\)>\^\*+]/,
@@ -6,16 +26,16 @@ var Conjure = (function() {
 
     /**
      * returns true when precedence of operator f is less than
-     * that of g
+     * that of g.
      * @param  {string} f string representing emmet operator
      * @param  {string} g ibid
      * @return {boolean} true when precendence of f <= g
      */
-    var prec = function(f, g) {};
+    var precLT = function(f, g) {};
 
     /**
-     * elements of tokens represent the RPN of expr
-     * @param {array} expr : emmet string to be parsed
+     * obtain RPN for expr using Shunting-yard algorithm.
+     * @param {array} expr emmet string to be parsed
      */
     var SYAlgo = function(expr) {
 
@@ -36,9 +56,9 @@ var Conjure = (function() {
                         while (stack[len - 1] !== '(') {
                             tokens.push(stack.pop());
                         }
-                        stack.pop();
+                        stack.pop(); // ')' is removed from expr at end of while loop
                     } else {
-                        while (prec(currentOp, stack[len - 1])) {
+                        while (precLT(currentOp, stack[len - 1])) {
                             tokens.push(stack.pop());
                         }
                         stack.push(currentOp);
@@ -58,14 +78,12 @@ var Conjure = (function() {
         stack = []; // for good measure
     };
 
+    /**
+     * This dictionary of functions defines what the emmet operators
+     * do to the non-operator tokens.
+     * @type {Object}
+     */
     var opHash = {
-        '(': function(a, b) {
-
-        },
-
-        ')': function(a, b) {
-
-        },
 
         '>': function(a, b) {
 
@@ -82,10 +100,17 @@ var Conjure = (function() {
         '+': function(a, b) {
 
         },
-
     };
 
-    var create = function(expr) {
+    /**
+     * Here we obtain the RPN array tokens from SYAlgo, then construct
+     * the HTML expansion.
+     * @param  {string} expr emmet abbreviation syntax
+     * @return {string}      HTML expansion of expr
+     *
+     * Future: return an actual DOM/JQuery/other object rather than a string?
+     */
+    var construct = function(expr) {
         SYAlgo(expr);
         var len = tokens.length;
 
@@ -96,6 +121,10 @@ var Conjure = (function() {
                 stack.push(opHash[tokens[len]](stack.pop(), stack.pop()));
             }
         }
+    };
+
+    return {
+        element: construct
     };
 
 })();
