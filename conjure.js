@@ -7,7 +7,7 @@
  * which we shamelessly pirate for consistency to the user and its injenuity
  * (thanks Emmet developers!).
  *
- * The Conjure.js module exposes one (maybe more in the future) function:
+ * The Conjure.js module exposes a single (maybe more in the future) function:
  *
  * Conjure.element(emmetStr)
  *
@@ -25,35 +25,12 @@ var Conjure = (function() {
         stack = [];
 
     /**
-     * This hash value precLTE[f][g] is true when the precedence
-     * of operator f is less than or equal to that of operator g.
+     * Hash to simplify conditional in SYAlgo.
      * @type {Object}
      */
-    var precLTE = { // need to actually configure this
-        '>': {
-
-            '^': true,
-            '*': true,
-            '+': true
-        },
-        '^': {
-
-            '>': true,
-            '*': true,
-            '+': true
-        },
-        '*': {
-
-            '>': true,
-            '^': true,
-            '+': true
-        },
-        '+': {
-
-            '>': false,
-            '^': true,
-            '*': true
-        },
+    var badOp = {
+        '^': false,
+        ')': false
     };
 
     /**
@@ -62,43 +39,34 @@ var Conjure = (function() {
      */
     var SYAlgo = function(expr) {
 
-        var i = expr.search(operator), // i>0 means first character is not an stack
-            currentOp, len;
+        var i = expr.search(operator), // -1 if no operator, > 0 if operator is NOT first charactor
+            currentOp = expr[0];
 
-        while (++i) { // if there is an stack
+        while (++i) { // if there is an operator
             if (i - 1) { // and it is NOT the first character
                 tokens.push(expr.slice(0, i));
-            } else {
+            } else if (!badOp[currentOp]) { // if it is the first character and simple
+                stack.push(currentOp);
+            } else if (currentOp === '^') { // deal with '^' (see op_rules file)
+                tokens.push(stack.pop());
+                stack.push('+');
+            } else { // otherwise we have a closing parenthesis
                 len = stack.length;
-                currentOp = expr[0];
-
-                if (!len || currentOp === '(') {
-                    stack.push(currentOp);
-                } else {
-                    if (currentOp === ')') {
-                        while (stack[len - 1] !== '(') {
-                            tokens.push(stack.pop());
-                        }
-                        stack.pop(); // ')' is removed from expr at end of while loop
-                    } else {
-                        while (precLTE[currentOp][stack[len - 1]]) {
-                            tokens.push(stack.pop());
-                        }
-                        stack.push(currentOp);
-                    }
+                while (stack[--len] !== '(') {
+                    tokens.push(stack.pop());
                 }
+                stack.pop();
             }
-            expr = expr.slice(i);
+            expr = expr.slice(i); // remove token we just processed and repeat
             i = expr.search(operator);
-        } // we have removed all stacks from expr
+        } // we have removed all operators from expr
 
-        tokens.push(expr); // push on last non-stack
+        tokens.push(expr); // push remaining token
 
         len = stack.length;
-        while (len--) {
+        while (len--) { // push remaining operators
             tokens.push(stack.pop());
-        }
-        stack = []; // for good measure
+        } // stack is now empty
     };
 
     /**
@@ -106,17 +74,13 @@ var Conjure = (function() {
      * do to the non-operator tokens.
      * @type {Object}
      */
-    var opHash = {
+    var opFuncHash = {
 
         '>': function(a, b) { // make a the parent of b
 
         },
 
-        '^': function(a, b) { // move up a level
-
-        },
-
-        '*': function(a, b) { // repeat a b times
+        '*': function(a, b) { // repeat a, b times
 
         },
 
@@ -134,14 +98,15 @@ var Conjure = (function() {
      * Future: return an actual DOM/JQuery/other object rather than a string?
      */
     var construct = function(expr) {
-        SYAlgo(expr); // may need to reverse
+        SYAlgo(expr);
+        tokens.reverse();
         var len = tokens.length;
 
         while (len--) {
-            if (!opHash[tokens[len]]) { // if the last token is not an operator
+            if (!opFuncHash[tokens[len]]) { // if the token is not an operator
                 stack.push(tokens.pop());
             } else {
-                stack.push(opHash[tokens[len]](stack.pop(), stack.pop()));
+                stack.push(opFuncHash[tokens[len]](stack.pop(), stack.pop()));
             }
         }
     };
