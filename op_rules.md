@@ -1,4 +1,5 @@
 Operator rules for SYAlgo:
+==========================
 
 In general, the precedence of the operator is given by the
 order in which it appears, NOT by the operator itself.  That
