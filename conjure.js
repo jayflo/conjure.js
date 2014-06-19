@@ -21,11 +21,10 @@
  */
 var Conjure = (function() {
     var tokens = [],
-        stack = [],
-        len;
+        stack = [];
 
     /**
-     * obtain RPN for expr using Shunting-yard algorithm.
+     * obtain RPN for expr using the Shunting-yard algorithm.
      * @param {array} expr emmet string to be parsed
      */
     var SYAlgo = function(expr) {
@@ -42,26 +41,42 @@ var Conjure = (function() {
             badOps = {
                 '^': true,
                 ')': true
-            };
-
-        expr = (expr.match(operator)).reverse();
-        var i = expr.length,
+            },
+            openParenIndex = [],
             len;
+
+        expr = (expr.match(operator)).reverse(); // assumes attributes do not contain any operator
+        var i = expr.length;
 
         while (--i) { // if there is an operator
             if (!operator[expr[i]]) {
                 tokens.push(expr.pop());
             } else if (!badOps[expr[i]]) {
+                if (expr[i] == '(') {
+                    openParenIndex.push(tokens.length); // all tokens after this index are inside current parentheses
+                }
                 stack.push(expr.pop());
-            } else if (expr[i] === '^') { // deal with '^' (see op_rules file)
+            } else if (expr[i] === '^') {
                 tokens.push(stack.pop());
                 stack.push('+');
+                expr.pop();
             } else { // otherwise we have a closing parenthesis
+                if (!operator[expr[i - 1]]) { // next token must be attributes, so distribute to tokens.
+                    var j = tokens.length;
+                    len = openParenIndex.length;
+                    while (j - openParenIndex[len - 1] > 0) {
+                        tokens[--j].concat(expr[i - 1]);
+                    }
+                    openParenIndex.pop();
+                    i--;
+                    expr.pop();
+                }
                 len = stack.length;
                 while (stack[--len] !== '(') {
                     tokens.push(stack.pop());
                 }
                 stack.pop();
+                expr.pop(); // pop off closing parenthesis
             }
         } // we have removed all operators from expr
 
@@ -69,11 +84,11 @@ var Conjure = (function() {
         while (len--) { // push remaining operators
             tokens.push(stack.pop());
         } // stack is now empty
-        tokens.reverse(); // construct needs to read tokens from bottom
+        tokens.reverse(); // buildTree needs to read tokens from bottom
     };
 
     /**
-     * This has should contain all tag types which do not require a
+     * This hash should contain all tag types which do not require a
      * closing tag.
      * @type {Object}
      */
@@ -84,20 +99,20 @@ var Conjure = (function() {
 
     /**
      * Determine if closing tag is needed and return finished product.
-     * @param  {string} expr formatted tag type and attributes
-     * @param  {string} text text provided from {text} syntax.
-     * @return {string}      complete HTML tag
+     * @param  {string} type tag type
+     * @param  {string} attr tag attributes
+     * @return {array}      first element is opening tag, second is closing (should it exist)
      */
-    var tagify = function(expr, text) {
+    var tagify = function(type, attr) {
         if (!uniTag[expr]) {
-            return ['<', expr, '>', text, '</', expr, '>'].join('');
+            return ['<'.concat(type, attr, '>'), '</'.concat(type, '>')];
         } else {
-            return ['<', expr, '>'].join('');
+            return ['<'.concat(type, attr, '>')];
         }
     };
 
     /**
-     * Assuming only match brackets, find closing bracket.
+     * Assuming only matching brackets exist, find closing bracket.
      * @param  {string} expr find closing bracket here
      * @return {number}      index of closing bracket
      */
@@ -121,47 +136,43 @@ var Conjure = (function() {
      * Changes a token into HTML tag.  We must work through expr manually since
      * the custom attribute and text brackets may contain attr operators themselves.
      * So we are unable to use a generic regular expression. RULES:
-     * 1) Custom attribute tags [] must contain only matched brackets
-     * 2) Text attribute tags {} must go last
+     * 1) no attribute can contain emmet operators (see SYAlgo.operators)
+     * 2) Custom attribute tags [] must contain only matched brackets
      *
      * @param  {string} expr a token parsed from emmet syntax
-     * @return {string}      HTML expansion of the token
+     * @return {array}       first element is opening tag, second is closing (should it exist)
      */
     var createTag = function(expr) {
-        var attrOps = /#\.\[\]\{\}/,
-            i = expr.search(attrOps);
+        var attrRe = /#\.\[/,
+            i = expr.search(attrRe);
 
         if (++i) { // expr has no attributes
-            return tagify(expr);
+            return tagify(expr, '');
         }
 
-        var tag = expr.slice(0, i) + ' ', // characters before first attribute comprise tag
+        var type = expr.slice(0, i) + ' ', // characters before first attribute comprise tag
             attrHash = {
                 '.': "class=",
                 '#': "id="
-            }, attr, val;
+            }, attr = [],
+            currentAttrOp, val;
         expr = expr.slice(i); // leave only attribute(s)
 
         while (expr.length) { // format all attributes
-            attr = expr[0];
+            currentAttrOp = expr[0];
             expr = expr.slice(1);
-            i = expr.search(attrOps); // index of next attribute operator (should it exist)
 
-            if (attrHash[attr]) {
+            if (attrHash[currentAttrOp]) {
+                i = expr.search(attrRe); // index of next attribute operator (should it exist)
                 val = ++i ? expr : expr.slice(0, i);
-                tag = [tag, attrHash[attr], '"', val, '" '].join('');
-                val = '';
-            } else if (attr === '[') {
-                i = findClosingBracket(expr);
-                tag = [tag, ' ', expr.slice(0, ++i), ' '].join('');
+                attr.push(attrHash[currentAttrOp], '"', val, '" ');
             } else {
-                val = expr.slice(1, -1);
-                expr = '';
-                i = 0;
+                i = findClosingBracket(expr); // assumes custom attributes do not contain mismatched square brackets
+                attr.push(expr.slice(0, ++i), ' ');
             }
             expr = expr.slice(i);
         }
-        return tagify(tag, val);
+        return tagify(type, attr.join(''));
     };
 
     /**
@@ -174,10 +185,9 @@ var Conjure = (function() {
          * These functions define the emmet syntax operators.  The argument b,
          * which is popped off the stack second, is the single token which is
          * to be merged into a, the accumulation of the previous operations.
-         * @param  {string} a the HTML which is the sum total of merges up to
-         *                    this point
+         * @param  {array}  a
          * @param  {string} b the new token to be merged into a
-         * @return {string}   new HTML with b merged into a
+         * @return {array}   new HTML with b merged into a
          */
         '>': function(a, b) {
 
@@ -193,16 +203,44 @@ var Conjure = (function() {
     };
 
     /**
-     * Here we obtain the RPN array tokens from SYAlgo, then construct
+     * Standard tree classes used to keep track of parent/child
+     * relationship between tags.
+     * @param  {array} tag      of type returned from tagify
+     * @param  {node} parent    parent of current node
+     * @param  {array} children array of children nodes
+     */
+    var Node = function(tag, parent, children) {
+        this.tag = tag;
+        this.parent = parent || undefined;
+        this.children = children === undefined ? undefined : children instanceof Array ? children : [children];
+    };
+
+    var Tree = function(root) {
+        this.root = new Node(root);
+        this.nodes = [this.root];
+        this.prototype.Forest.push(this);
+    };
+
+    Tree.prototype.Forest = [];
+    Tree.prototype.addNode = function(tag, parent, children) {
+        var node = new Node(tag, parent, children);
+        this.nodes.push(node);
+    };
+
+    /**
+     * Here we obtain the RPN array tokens from SYAlgo, then buildTree
      * the HTML expansion.
      * @param  {string} expr emmet abbreviation syntax
-     * @return {string}      HTML expansion of expr
+     * @return {forest}      forest representing parent/child structure of html tags
      *
      * Future: return an actual DOM/JQuery/other object rather than a string?
      */
-    var construct = function(expr) {
+    var buildTree = function(expr) {
         SYAlgo(expr);
-        var len = tokens.length;
+
+        var ensemble = new Tree(tokens.pop);
+
+
 
         while (len--) {
             if (!opHash[tokens[len]]) { // if the token is not an operator
@@ -213,8 +251,8 @@ var Conjure = (function() {
         }
     };
 
-    return {
-        element: construct
-    };
+    // return {
+    //
+    // };
 
 })();
