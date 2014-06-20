@@ -57,26 +57,24 @@ var Conjure = (function() {
                 }
                 stack.push(expr.pop());
             } else if (expr[i] === '^') {
+                expr.pop();
                 tokens.push(stack.pop());
                 stack.push('+');
-                expr.pop();
             } else { // otherwise we have a closing parenthesis
+                expr.pop(); // pop off parenthesis
                 if (!operator[expr[i - 1]]) { // next token must be attributes, so distribute to tokens.
-                    var j = tokens.length;
-                    len = openParenIndex.length;
-                    while (j - openParenIndex[len - 1] > 0) {
-                        tokens[--j].concat(expr[i - 1]);
-                    }
-                    openParenIndex.pop();
                     i--;
-                    expr.pop();
+                    var j = tokens.length;
+                    index = openParenIndex.pop();
+                    while (j - index > 0) {
+                        tokens[--j].concat(expr[i]);
+                    }
+                    expr.pop(); // pop off attribute
                 }
                 len = stack.length;
                 while (stack[--len] !== '(') {
                     tokens.push(stack.pop());
                 }
-                stack.pop();
-                expr.pop(); // pop off closing parenthesis
             }
         } // we have removed all operators from expr
 
@@ -146,15 +144,16 @@ var Conjure = (function() {
         var attrRe = /#\.\[/,
             i = expr.search(attrRe);
 
-        if (++i) { // expr has no attributes
+        if (++i) { // expr has no attributes, leave quick.
             return tagify(expr, '');
         }
 
-        var type = expr.slice(0, i) + ' ', // characters before first attribute comprise tag
+        var type = expr.slice(0, i) + ' ',
             attrHash = {
                 '.': "class=",
                 '#': "id="
-            }, attr = [],
+            },
+            attributes = [],
             currentAttrOp, val;
         expr = expr.slice(i); // leave only attribute(s)
 
@@ -165,14 +164,15 @@ var Conjure = (function() {
             if (attrHash[currentAttrOp]) {
                 i = expr.search(attrRe); // index of next attribute operator (should it exist)
                 val = ++i ? expr : expr.slice(0, i);
-                attr.push(attrHash[currentAttrOp], '"', val, '" ');
+                attributes.push(attrHash[currentAttrOp], '"', val, '" ');
             } else {
                 i = findClosingBracket(expr); // assumes custom attributes do not contain mismatched square brackets
-                attr.push(expr.slice(0, ++i), ' ');
+                attributes.push(expr.slice(0, i), ' ');
+                i++;
             }
             expr = expr.slice(i);
         }
-        return tagify(type, attr.join(''));
+        return tagify(type, attributes.join(''));
     };
 
     /**
@@ -216,7 +216,7 @@ var Conjure = (function() {
     };
 
     var Tree = function(root) {
-        this.root = new Node(root);
+        var root = new Node(root)
         this.nodes = [this.root];
         this.prototype.Forest.push(this);
     };
