@@ -121,11 +121,7 @@ var Conjure = (function() {
 
         while (count > 0) {
             result = re.exec(expr);
-            if (result[0] === ']') {
-                count--;
-            } else {
-                count++;
-            }
+            count = result[0] === ']' ? count - 1 : count + 1;
         }
         return result.index;
     };
@@ -211,12 +207,12 @@ var Conjure = (function() {
      */
     var Node = function(tag, parent, children) {
         this.tag = tag;
-        this.parent = parent || undefined;
-        this.children = children === undefined ? undefined : children instanceof Array ? children : [children];
+        this.parent = parent || null;
+        this.children = children === null ? null : children instanceof Array ? children : [children];
     };
 
     var Tree = function(root) {
-        var root = new Node(root)
+        this.root = new Node(root);
         this.nodes = [this.root];
         this.prototype.Forest.push(this);
     };
