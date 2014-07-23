@@ -21,78 +21,62 @@
  */
 var Conjure = (function() {
     var tokens = [],
-        stack = [];
+        stack = [],
+        /**
+         * This hash should contain all tag types which do not require a
+         * closing tag.
+         */
+        UNITAG = {'br': true, 'input': true};
 
     /**
-     * obtain RPN for expr using the Shunting-yard algorithm.
+     * obtain RPN for (emmet) expr using the Shunting-yard algorithm.
      * @param {array} expr emmet string to be parsed
      */
     var SYAlgo = function(expr) {
 
-        var re = /[\(\)>\^\*+]|[^\(\)>\^\*+]+/g,
-            operator = {
-                '>': true,
-                '^': true,
-                '*': true,
-                '+': true,
-                ')': true,
-                '(': true
-            },
-            badOps = {
-                '^': true,
-                ')': true
-            },
+        expr = (expr.match(/[\(\)>\^\*+]|[^\(\)>\^\*+]+/g)).reverse();
+
+        var OPERATOR = {'>': true, '^': true, '*': true, '+': true, ')': true, '(': true},
+            BAD_OP = {'^': true, ')': true},
+            i = expr.length,
             openParenIndex = [],
             len;
 
-        expr = (expr.match(operator)).reverse(); // assumes attributes do not contain any operator
-        var i = expr.length;
-
-        while (--i) { // if there is an operator
-            if (!operator[expr[i]]) {
+        while (--i) {
+            if (!OPERATOR[expr[i]]) {
                 tokens.push(expr.pop());
-            } else if (!badOps[expr[i]]) {
+            } else if (!BAD_OP[expr[i]]) {
                 if (expr[i] == '(') {
-                    openParenIndex.push(tokens.length); // all tokens after this index are inside current parentheses
+                    openParenIndex.push(tokens.length);
                 }
                 stack.push(expr.pop());
             } else if (expr[i] === '^') {
                 expr.pop();
                 tokens.push(stack.pop());
                 stack.push('+');
-            } else { // otherwise we have a closing parenthesis
-                expr.pop(); // pop off parenthesis
-                if (!operator[expr[i - 1]]) { // next token must be attributes, so distribute to tokens.
+            } else {
+                expr.pop();
+                if (!OPERATOR[expr[i - 1]]) {
                     i--;
-                    var j = tokens.length;
-                    index = openParenIndex.pop();
+                    var j = tokens.length,
+                        index = openParenIndex.pop();
                     while (j - index > 0) {
                         tokens[--j].concat(expr[i]);
                     }
-                    expr.pop(); // pop off attribute
+                    expr.pop();
                 }
                 len = stack.length;
                 while (stack[--len] !== '(') {
                     tokens.push(stack.pop());
                 }
             }
-        } // we have removed all operators from expr
+        }
 
         len = stack.length;
-        while (len--) { // push remaining operators
+        while (len--) {
             tokens.push(stack.pop());
-        } // stack is now empty
-        tokens.reverse(); // buildTree needs to read tokens from bottom
-    };
-
-    /**
-     * This hash should contain all tag types which do not require a
-     * closing tag.
-     * @type {Object}
-     */
-    var uniTag = {
-        'br': true,
-        'input': true
+        }
+        tokens.reverse();
     };
 
     /**
@@ -102,7 +86,7 @@ var Conjure = (function() {
      * @return {array}      first element is opening tag, second is closing (should it exist)
      */
     var tagify = function(type, attr) {
-        if (!uniTag[expr]) {
+        if (!UNITAG[expr]) {
             return ['<'.concat(type, attr, '>'), '</'.concat(type, '>')];
         } else {
             return ['<'.concat(type, attr, '>')];
@@ -137,32 +121,31 @@ var Conjure = (function() {
      * @return {array}       first element is opening tag, second is closing (should it exist)
      */
     var createTag = function(expr) {
-        var attrRe = /#\.\[/,
-            i = expr.search(attrRe);
+        var RE_ATTR = /#\.\[/,
+            i = expr.search(RE_ATTR);
 
-        if (++i) { // expr has no attributes, leave quick.
+        if (++i) {
             return tagify(expr, '');
         }
 
         var type = expr.slice(0, i) + ' ',
-            attrHash = {
-                '.': "class=",
-                '#': "id="
-            },
+            ATTRIBUTE = {'.': "class=", '#': "id="},
             attributes = [],
-            currentAttrOp, val;
-        expr = expr.slice(i); // leave only attribute(s)
+            currentAttrOp,
+            val;
 
-        while (expr.length) { // format all attributes
+        expr = expr.slice(i);
+
+        while (expr.length) {
             currentAttrOp = expr[0];
             expr = expr.slice(1);
 
-            if (attrHash[currentAttrOp]) {
-                i = expr.search(attrRe); // index of next attribute operator (should it exist)
+            if (ATTRIBUTE[currentAttrOp]) {
+                i = expr.search(RE_ATTR);
                 val = ++i ? expr : expr.slice(0, i);
-                attributes.push(attrHash[currentAttrOp], '"', val, '" ');
+                attributes.push(ATTRIBUTE[currentAttrOp], '"', val, '" ');
             } else {
-                i = findClosingBracket(expr); // assumes custom attributes do not contain mismatched square brackets
+                i = findClosingBracket(expr);
                 attributes.push(expr.slice(0, i), ' ');
                 i++;
             }
@@ -176,7 +159,7 @@ var Conjure = (function() {
      * do to the non-operator tokens.
      * @type {Object}
      */
-    var opHash = {
+    var OP_ACTION = {
         /**
          * These functions define the emmet syntax operators.  The argument b,
          * which is popped off the stack second, is the single token which is
@@ -239,10 +222,10 @@ var Conjure = (function() {
 
 
         while (len--) {
-            if (!opHash[tokens[len]]) { // if the token is not an operator
+            if (!OP_ACTION[tokens[len]]) {
                 stack.push(tokens.pop());
             } else {
-                stack.push(opHash[tokens[len]](stack.pop(), stack.pop()));
+                stack.push(OP_ACTION[tokens[len]](stack.pop(), stack.pop()));
             }
         }
     };
